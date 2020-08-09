@@ -4,25 +4,25 @@ BDOS: EQU     5
 
     org   $100
     call  parseargs
-    jr    nc,myprogram
+    jr    nc,exitmyprogram
     ld    a,(parm_index)
     cp    $ff
     jr    nz,invalidparms
-
 noparams:
     add    $31
     call   PUTCHAR
     ld     hl,txt_noparams
-    jp     print
-    ret
+    call   print
+    jr     exitmyprogram
 
 invalidparms:
     add    $31
     call   PUTCHAR
     ld     hl,txt_invparms
-    jp     print
+    call   print
+    jr     exitmyprogram
 
-myprogram:
+exitmyprogram:
     ld    hl,txt_exit
     call  print
     ret    
@@ -46,15 +46,7 @@ parseargs:
     inc     hl
     ld      de,parms_table
     call    table_inspect
-    ret     c
-    ;ld      de,getnextparms
-    ;push    de
     ret     ; jump to the routine for the parameter
-    ret     ; return to msx-dos
-
-getnextparms:  
-    ret
-
 
 param_h:
     ld      a,(parm_index)
@@ -62,7 +54,6 @@ param_h:
     call    PUTCHAR
     ld      hl,txt_help
     call    print
-    scf
     ret
 
 param_s:
@@ -160,6 +151,7 @@ parm_search_found:
 table_inspect:
     ld      a,255
     ld      (parm_index),a
+    ld      (parm_nofound),a
 table_inspect0:
     push    hl         ; save the address of the parameters
 table_inspect1:
@@ -181,13 +173,14 @@ table_inspect_cmp:
     jr      nz,table_inspect_next   ; not this parameters, check next in the table
     inc     de
     pop     af         ; discard HL to keep current arrgs index
-
+    xor     a
+    ld      (parm_nofound),a
     ld      a,(de)
     ld      c,a
     inc     de
     ld      a,(de)
     ld      b,a
-    pop     de         ; get ret address out of the stack temopprrily
+    pop     de         ; get ret address out of the stack temporarily
     push    bc         ; push the routine address in the stack
     push    de         ; push the return addres of this routine back in the stack
     scf
@@ -292,4 +285,5 @@ parms_table:
     db 0
 
 parm_index: db $ff
+parm_nofound: db $ff
 parmspointer: dw 0000
