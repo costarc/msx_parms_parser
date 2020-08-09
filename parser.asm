@@ -4,46 +4,99 @@ BDOS: EQU     5
 
     org   $100
     call  parseargs
+    jr    nc,myprogram
+    ld    a,(parm_index)
+    cp    $ff
+    jr    nz,invalidparms
+
+noparams:
+    add    $31
+    call   PUTCHAR
+    ld     hl,txt_noparams
+    jp     print
     ret
+
+invalidparms:
+    add    $31
+    call   PUTCHAR
+    ld     hl,txt_invparms
+    jp     print
+
+myprogram:
+    ld    hl,txt_exit
+    call  print
+    ret    
+
 
 parseargs:
     ld      hl,$80
-    ld      c,(hl)
+    ld      a,(hl)
+    or      a
+    scf
+    ret     z
+    ld      c,a
     ld      b,0
     inc     hl
     push    hl
     add     hl,bc
     ld      (hl),0   ; terminates the command line with zero
     pop     hl
-    ld      (parmspointer),hl
     call    space_skip
+    ret     c
     inc     hl
     ld      de,parms_table
     call    table_inspect
-    jr      c,nocliargs
-    jp      (hl)
+    ret     c
+    ;ld      de,getnextparms
+    ;push    de
+    ret     ; jump to the routine for the parameter
+    ret     ; return to msx-dos
 
-nocliargs:
-    ld     hl,txt_parmerr
-    jp     print
+getnextparms:  
+    ret
+
 
 param_h:
+    ld      a,(parm_index)
+    add     $31
+    call    PUTCHAR
     ld      hl,txt_help
     call    print
     scf
     ret
 
 param_s:
+    ld      a,(parm_index)
+    add     $31
+    call    PUTCHAR
     ret
 param_e:
+    ld      a,(parm_index)
+    add     $31
+    call    PUTCHAR
     ret
 param_d:
+    ld      a,(parm_index)
+    add     $31
+    call    PUTCHAR
     ret
 param_i:
+    ld      a,(parm_index)
+    add     $31
+    call    PUTCHAR
     ret
 param_f:
+    ld      a,(parm_index)
+    add     $31
+    call    PUTCHAR
     ld      hl,txt_parm_f
     jp      print
+
+; ================================================================================
+init:
+	xor     a
+	ld      (parm_index),a
+	ret
 
 ; Find Command Line Argument.
 ; Inputs: 
@@ -67,6 +120,8 @@ param_f:
 ;      if A = 255: HL = invalid address since there is no parameter in the CLI
 ;                : DE = not valid as ther is no parameter for this in the parameters table
 parm_search:
+    call    space_skip
+    ret     c
     ld      de,parms_table
 parm_search1:
     ld      a,(hl)
@@ -92,7 +147,20 @@ parm_search_found:
     ccf
     ret
 
+; table_inspect: get next parameters in the buffer and verify if it is valid
+; then return the address of the routine to process the parameter
+;
+; Inputs:
+; HL = address of buffer with parameters to parse, teminated in zero
+; Outputs:
+; HL = address of the buffer updated
+; Stack = address of the routine for the parameter
+; 
+
 table_inspect:
+    ld      a,255
+    ld      (parm_index),a
+table_inspect0:
     push    hl         ; save the address of the parameters
 table_inspect1:
     ld      a,(hl)
@@ -112,12 +180,16 @@ table_inspect_cmp:
     or      a
     jr      nz,table_inspect_next   ; not this parameters, check next in the table
     inc     de
+    pop     af         ; discard HL to keep current arrgs index
+
     ld      a,(de)
-    ld      l,a
+    ld      c,a
     inc     de
     ld      a,(de)
-    ld      h,a
-    pop     af         ; discard HL to keep current arrgs index
+    ld      b,a
+    pop     de         ; get ret address out of the stack temopprrily
+    push    bc         ; push the routine address in the stack
+    push    de         ; push the return addres of this routine back in the stack
     scf
     ccf
     ret
@@ -127,12 +199,17 @@ table_inspect_next:
     inc     de
     or      a
     jr      nz,table_inspect_next
+    ld      a,(parm_index)
+    inc     a
+    ld      (parm_index),a    ; this index will tell which parameter was found
     pop     hl
     inc     de
     inc     de
     ld      a,(de)
     or      a
-    jr      nz,table_inspect 
+    jr      nz,table_inspect0
+    ;ld      a,$ff
+    ;ld      (parm_index),a   ; parameter not found in the index
     scf
     ret
 
@@ -194,10 +271,15 @@ txt_help: db "Command Line Parser for MSX-DOS",13,10
           db "/e Enable the EEPROM Software Data Protection after writing",13,10
           db "/f File name with extension, for example game.rom",13,10
           db 0
-txt_parmerr: db "Invalid parameters",13,10,0
+txt_invparms: db "Invalid parameters",13,10,0
+txt_noparams: db "No command line parameters passed",13,10,0
 txt_parm_f: db "Filename:",13,10,0
+txt_exit: db "Returning to MSX-DOS",13,10,0
+
 parms_table:
     db "h",0
+    dw param_h
+    db "help",0
     dw param_h
     db "e",0
     dw param_e
@@ -205,9 +287,9 @@ parms_table:
     dw param_d
     db "i",0
     dw param_i
-    db "f",0
+    db "file",0
     dw param_f
     db 0
 
-
+parm_index: db $ff
 parmspointer: dw 0000
