@@ -15,9 +15,12 @@ BDOS: EQU     5
     ld    a,(data_option_f)
     cp    $ff
     jp    z,print
-noparams:
-    ld     hl,data_option_f
-    call   print
+    ld    hl,data_option_f
+    ld    a,(hl)
+    add   $30
+    call  PUTCHAR
+    inc   hl
+    call  print
     jr     exitmyprogram
 
 exitmyprogram:
@@ -77,9 +80,8 @@ param_i:
     ld      a,'I'
     call    PUTCHAR
     ret
+
 param_f:
-    ld      a,'F'
-    call    PUTCHAR
     ld      hl,(parm_address) ; get current address in the bufer
     call    space_skip
     ld      (parm_address),hl
@@ -87,14 +89,41 @@ param_f:
     cp      '/'
     ret     z
     ld      de,data_option_f
+                              ;check if drive letter was passed
+    inc     hl
+    ld      a,(hl)
+    dec     hl
+    cp      ':'
+    ld      c,0
+    jr      nz,parm_g_a
+    ld      a,(hl)
+    inc     hl
+    inc     hl
+    cp      'a'
+    jr      c,param_is_uppercase
+    sub     'a'
+    jr      param_checkvalid
+param_is_uppercase:
+    sub     'A'
+param_checkvalid:
+    jr      c,param_invaliddrive
+    inc     a
+    ld      c,a
+    jr      parm_g_a
+param_invaliddrive:
+    ld      c,$ff             ; ivalid drive, BDOS will return error when called    
+parm_g_a:
+    ld      a,c
+    ld      (de),a            ; drive number
+    inc     de
     ld      b,8               ; filename in format "filename.ext"
     call    parm_f_0          ; get filename without extension
     ld      b,3               ; filename in format "filename.ext"
     ld      a,(hl)
     cp      '.'
-    jr      nz,prm_g_a
+    jr      nz,parm_g_b
     inc     hl
-prm_g_a:
+parm_g_b:
     ld      (parm_address),a
     call    parm_f_0          ; get filename without extension
     ret
@@ -290,5 +319,5 @@ parm_address: dw 0000
 data_option_e: db 1
 data_option_d: db 1
 data_option_s: db 0
-data_option_f: db $ff,0,0,0,0,0,0,0,0,0,0
+data_option_f: db $ff,$ff,0,0,0,0,0,0,0,0,0,0
                db 0
