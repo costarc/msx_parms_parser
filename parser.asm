@@ -95,7 +95,7 @@ param_f:
     dec     hl
     cp      ':'
     ld      c,0
-    jr      nz,parm_g_a
+    jr      nz,parm_f_a
     ld      a,(hl)
     inc     hl
     inc     hl
@@ -109,10 +109,10 @@ param_checkvalid:
     jr      c,param_invaliddrive
     inc     a
     ld      c,a
-    jr      parm_g_a
+    jr      parm_f_a
 param_invaliddrive:
     ld      c,$ff             ; ivalid drive, BDOS will return error when called    
-parm_g_a:
+parm_f_a:
     ld      a,c
     ld      (de),a            ; drive number
     inc     de
@@ -121,34 +121,34 @@ parm_g_a:
     ld      b,3               ; filename in format "filename.ext"
     ld      a,(hl)
     cp      '.'
-    jr      nz,parm_g_b
+    jr      nz,parm_f_b
     inc     hl
-parm_g_b:
+parm_f_b:
     ld      (parm_address),a
     call    parm_f_0          ; get filename without extension
     ret
 parm_f_0:
     ld      a,(hl)
     or      a
-    jr      z,parm_g_2
+    jr      z,parm_f_2
     cp      '/'
-    jr      z,parm_g_2
+    jr      z,parm_f_2
     cp      ' '
-    jr      z,parm_g_2
+    jr      z,parm_f_2
     cp      '.'
-    jr      z,parm_g_2
-prm_g_1:
+    jr      z,parm_f_2
+parm_f_1:
     ld      (de),a
     inc     hl
     inc     de
     djnz    parm_f_0
     ld      (parm_address),hl
     ret
-parm_g_2:
+parm_f_2:
     ld      a,' '
     ld      (de),a
     inc     de
-    djnz    parm_g_2
+    djnz    parm_f_2
     ld      (parm_address),hl
     ret
 
