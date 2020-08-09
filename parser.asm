@@ -7,17 +7,16 @@ BDOS: EQU     5
     ld    a,(ignorerc)
     or    a
     ret   z
-    ld    hl,txt_needfname
-    ld    a,(data_option_f)
-    cp    $ff
-    jp    z,print
     ld    hl,txt_invparms
     ld    a,(parm_found)
     cp    $ff
     jp    z,print
-
+    ld    hl,txt_needfname
+    ld    a,(data_option_f)
+    cp    $ff
+    jp    z,print
 noparams:
-    ld     hl,txt_noparams
+    ld     hl,data_option_f
     call   print
     jr     exitmyprogram
 
@@ -63,75 +62,68 @@ param_h:
     ld      (ignorerc),a
     ld      hl,txt_help
     call    print
+    or      a
     ret
 
-param_s:
-    ret
 param_e:
+    ld      a,'E'
+    call    PUTCHAR
     ret
 param_d:
+    ld      a,'D'
+    call    PUTCHAR
     ret
 param_i:
+    ld      a,'I'
+    call    PUTCHAR
     ret
 param_f:
-    ld      hl,txt_parm_f
-    jp      print
-
-; ================================================================================
-init:
-	xor     a
-	ld      (parm_index),a
-	ret
-
-; Find Command Line Argument.
-; Inputs: 
-; E = Parameter to search for
-; HL = memory address to start testing
-;
-; Outputs:
-; HL = updated memory address to the next valid char after the parameters if it was found,
-;      otherwise return the original value
-; Flac: C if did not find the parameter
-;      NC if found the parameters. 
-; A = 0 if found a valid parameter (prefixed by "/")
-; A = 1 if parameter is a string (not pre-fixed by "/") - this means this should be treated 
-;       as the last parameter in the command line. 
-; A = 255 if no parameters were found, therefore there is not parameters passed in the CLI
-; HL = Relevant address according to the result of the function. 
-;      if A = 0  : HL = Next valid memory address string
-;                  DE = Address of the routine for this prameter
-;      if A = 1  : HL = Next valid memory address string
-;                : DE = not valid as ther is no parameter for this in the parameters table
-;      if A = 255: HL = invalid address since there is no parameter in the CLI
-;                : DE = not valid as ther is no parameter for this in the parameters table
-parm_search:
+    ld      a,'F'
+    call    PUTCHAR
+    ld      hl,(parm_address) ; get current address in the bufer
     call    space_skip
-    ret     c
-    ld      de,parms_table
-parm_search1:
+    ld      (parm_address),hl
+    ld      a,(hl)
+    cp      '/'
+    ret     z
+    ld      de,data_option_f
+    ld      b,8               ; filename in format "filename.ext"
+    call    parm_f_0          ; get filename without extension
+    ld      b,3               ; filename in format "filename.ext"
+    ld      a,(hl)
+    cp      '.'
+    jr      nz,prm_g_a
+    inc     hl
+prm_g_a:
+    ld      (parm_address),a
+    call    parm_f_0          ; get filename without extension
+    ret
+parm_f_0:
     ld      a,(hl)
     or      a
-    scf
-    ret     z
-    inc     hl
+    jr      z,parm_g_2
     cp      '/'
-    jr      nz,parm_search1
-    push    hl
-    push    de
-    call    table_inspect
-    jr      nc,parm_search_found
-    pop     de
-    pop     hl
-    jr      parm_search1
-parm_search_found:
-    pop     af     ; discard DE in stack because DE returned by table_inspect
-                   ; contain the address of the routine for this parameter
-    pop     af     ; discard HL in the stack because HL returned bt table_inspect
-                   ; contain the next addres of the arguments to be processed
-    scf
-    ccf
+    jr      z,parm_g_2
+    cp      ' '
+    jr      z,parm_g_2
+    cp      '.'
+    jr      z,parm_g_2
+prm_g_1:
+    ld      (de),a
+    inc     hl
+    inc     de
+    djnz    parm_f_0
+    ld      (parm_address),hl
+    ret
+parm_g_2:
+    ld      a,' '
+    ld      (de),a
+    inc     de
+    djnz    parm_g_2
+    ld      (parm_address),hl
     ret
 
+; ================================================================================
 ; table_inspect: get next parameters in the buffer and verify if it is valid
 ; then return the address of the routine to process the parameter
 ;
@@ -280,14 +272,23 @@ parms_table:
     dw param_f
     db 0
 
-data_option_e: db 1
-data_option_d: db 1
-data_option_s: db 0
-data_option_f: db 255,0,0,0,0,0,0,0,0,0,0
-
+; each paramater from command line should have an impact in the program
+; these options here are defined to store the results of the parsing for each argumen
+; for example, if cli hard /help, then none of his is needed because the help will be displayed,
+; and the program will exit to propt.
+; However, if /enable option was passed, then we need a flag to indicate this case.
+; "data_option_e" cnotain initially 1, but if the /enable was passed, then the routine "param_e"
+; must change this value to zero.
+; Another exampe is for the filename. The initial value in "data_option_f" contain a $ff in 
+; the first position. If the filename is passed using /file <filename.ext>, this address should
+; contain the actual filename in the format "filenameext" (11 chars).
 
 parm_index: db $ff
 parm_found: db $ff
 ignorerc:   db $ff
-
 parm_address: dw 0000
+data_option_e: db 1
+data_option_d: db 1
+data_option_s: db 0
+data_option_f: db $ff,0,0,0,0,0,0,0,0,0,0
+               db 0
