@@ -4,21 +4,20 @@ BDOS: EQU     5
 
     org   $100
     call  parseargs
-    jr    nc,exitmyprogram
-    ld    a,(parm_index)
+    ld    a,(ignorerc)
+    or    a
+    ret   z
+    ld    hl,txt_needfname
+    ld    a,(data_option_f)
     cp    $ff
-    jr    nz,invalidparms
-noparams:
-    add    $31
-    call   PUTCHAR
-    ld     hl,txt_noparams
-    call   print
-    jr     exitmyprogram
+    jp    z,print
+    ld    hl,txt_invparms
+    ld    a,(parm_found)
+    cp    $ff
+    jp    z,print
 
-invalidparms:
-    add    $31
-    call   PUTCHAR
-    ld     hl,txt_invparms
+noparams:
+    ld     hl,txt_noparams
     call   print
     jr     exitmyprogram
 
@@ -41,45 +40,40 @@ parseargs:
     add     hl,bc
     ld      (hl),0   ; terminates the command line with zero
     pop     hl
+ parse_next:
     call    space_skip
     ret     c
     inc     hl
     ld      de,parms_table
     call    table_inspect
-    ret     ; jump to the routine for the parameter
+    ret     c
+    ld      a,(parm_found)
+    or      a
+    jr      nz,parse_checkendofparms
+    pop     hl ; get form stack the address of the routine for this parameter
+    ld      de,parse_checkendofparms
+    push    de
+    jp      (hl)     ; jump to the routine for the parameter
+parse_checkendofparms:
+    ld      hl,(parm_address)
+    jr      parse_next
 
 param_h:
-    ld      a,(parm_index)
-    add     $31
-    call    PUTCHAR
+    xor     a
+    ld      (ignorerc),a
     ld      hl,txt_help
     call    print
     ret
 
 param_s:
-    ld      a,(parm_index)
-    add     $31
-    call    PUTCHAR
     ret
 param_e:
-    ld      a,(parm_index)
-    add     $31
-    call    PUTCHAR
     ret
 param_d:
-    ld      a,(parm_index)
-    add     $31
-    call    PUTCHAR
     ret
 param_i:
-    ld      a,(parm_index)
-    add     $31
-    call    PUTCHAR
     ret
 param_f:
-    ld      a,(parm_index)
-    add     $31
-    call    PUTCHAR
     ld      hl,txt_parm_f
     jp      print
 
@@ -149,9 +143,9 @@ parm_search_found:
 ; 
 
 table_inspect:
-    ld      a,255
+    ld      a,$ff
     ld      (parm_index),a
-    ld      (parm_nofound),a
+    ld      (parm_found),a
 table_inspect0:
     push    hl         ; save the address of the parameters
 table_inspect1:
@@ -174,7 +168,7 @@ table_inspect_cmp:
     inc     de
     pop     af         ; discard HL to keep current arrgs index
     xor     a
-    ld      (parm_nofound),a
+    ld      (parm_found),a
     ld      a,(de)
     ld      c,a
     inc     de
@@ -183,6 +177,7 @@ table_inspect_cmp:
     pop     de         ; get ret address out of the stack temporarily
     push    bc         ; push the routine address in the stack
     push    de         ; push the return addres of this routine back in the stack
+    ld      (parm_address),hl
     scf
     ccf
     ret
@@ -268,6 +263,7 @@ txt_invparms: db "Invalid parameters",13,10,0
 txt_noparams: db "No command line parameters passed",13,10,0
 txt_parm_f: db "Filename:",13,10,0
 txt_exit: db "Returning to MSX-DOS",13,10,0
+txt_needfname: db "File name not specified",13,10,0
 
 parms_table:
     db "h",0
@@ -284,6 +280,14 @@ parms_table:
     dw param_f
     db 0
 
+data_option_e: db 1
+data_option_d: db 1
+data_option_s: db 0
+data_option_f: db 255,0,0,0,0,0,0,0,0,0,0
+
+
 parm_index: db $ff
-parm_nofound: db $ff
-parmspointer: dw 0000
+parm_found: db $ff
+ignorerc:   db $ff
+
+parm_address: dw 0000
