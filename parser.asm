@@ -1,12 +1,63 @@
-
+;|===========================================================================|
+;|                                                                           |
+;| MSX Command Line Parser for MSX-DOS 32K EEPROM                            |
+;|                                                                           |
+;| Version : 1.0                                                             |
+;|                                                                           |
+;| Copyright (c) 2020 Ronivon Candido Costa (ronivon@outlook.com)            |
+;|                                                                           |
+;| All rights reserved                                                       |
+;|                                                                           |
+;| Redistribution and use in source and compiled forms, with or without      |
+;| modification, are permitted under GPL license.                            |
+;|                                                                           |
+;|===========================================================================|
+;|                                                                           |
+;| This file is part of msx_parms_parser project.                            |
+;|                                                                           |
+;| msx_parms_parser is free software: you can redistribute it and/or modify  |
+;| it under the terms of the GNU General Public License as published by      |
+;| the Free Software Foundation, either version 3 of the License, or         |
+;| (at your option) any later version.                                       |
+;|                                                                           |
+;| MSX msx_parms_parser is distributed in the hope that it will be useful,   |
+;| but WITHOUT ANY WARRANTY; without even the implied warranty of            |
+;| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the             |
+;| GNU General Public License for more details.                              |
+;|                                                                           |
+;| You should have received a copy of the GNU General Public License         |
+;| along with msx_parms_parser.  If not, see <http://www.gnu.org/licenses/>. |
+;|===========================================================================|
+;
+; Compile this file with z80asm:
+;  z80asm parser.asm -o parser.com
+; File history :
+; 1.0  - 10/08/2020 : initial version
+;
+; How to use:
+; 1. Define you options in the parms_table
+; 2. Add your data / flags requirements in table data_option_<function name>
+; 3. Each option must have a "dw nnnn" entry, which is a label to the routine
+;    that will implement the logic for that option
+; 4. Code the routine for that optin, as a regular sub-routine, terminating 
+;    with "ret"
+; 5. If that routine is self-contained and don't need any further processing,
+;    add this code before the "ret" instruction: "xor a; ld (ignorerc),a" 
+; 6. Inside a routine for each argument, you can establish the order of 
+;    processing as you wish. For example, in the /file routine, you can check
+;    if the another mandatory option was passed, as for example:
+;    "/e" to encode or "d" to decode -> these needs a flag set in the table
+;    data_option_<fucntion name>. If the value is $ff than the parameters was
+;    not passed.
+;=============================================================================
 
 BDOS: EQU     5
 
     org   $100
     call  parseargs
-    ld    a,(ignorerc)
-    or    a
-    ret   z
+    ld    a,(ignorerc)          ; this byte tells the main program that it can exit
+    or    a                     ; No additional processing is required because
+    ret   z                     ; it is all done within the param_<option> routines
     ld    hl,txt_invparms
     ld    a,(parm_found)
     cp    $ff
@@ -15,6 +66,9 @@ BDOS: EQU     5
     ld    a,(data_option_f)
     cp    $ff
     jp    z,print
+
+                                ; Ssample code - display the file name passed from CLI in FCB format
+                                ; <drive>FileNameExt" : 1 byte for drive, 11 bytes for filename
     ld    hl,data_option_f
     ld    a,(hl)
     add   $30
@@ -40,9 +94,9 @@ parseargs:
     inc     hl
     push    hl
     add     hl,bc
-    ld      (hl),0   ; terminates the command line with zero
+    ld      (hl),0                      ; terminates the command line with zero
     pop     hl
- parse_next:
+parse_next:
     call    space_skip
     ret     c
     inc     hl
@@ -52,10 +106,11 @@ parseargs:
     ld      a,(parm_found)
     or      a
     jr      nz,parse_checkendofparms
-    pop     hl ; get form stack the address of the routine for this parameter
+    pop     hl                          ; get form stack the address of the routine
+                                        ; for this parameter
     ld      de,parse_checkendofparms
     push    de
-    jp      (hl)     ; jump to the routine for the parameter
+    jp      (hl)                        ; jump to the routine for the parameter
 parse_checkendofparms:
     ld      hl,(parm_address)
     jr      parse_next
@@ -168,7 +223,7 @@ table_inspect:
     ld      (parm_index),a
     ld      (parm_found),a
 table_inspect0:
-    push    hl         ; save the address of the parameters
+    push    hl                       ; save the address of the parameters
 table_inspect1:
     ld      a,(hl)
     cp      ' '
@@ -178,7 +233,7 @@ table_inspect1:
     ld      c,a
     ld      a,(de)
     cp      c
-    jr      nz,table_inspect_next  ; not this parameters, get next in the table
+    jr      nz,table_inspect_next   ; not this parameters, get next in the table
     inc     hl
     inc     de
     jr      table_inspect1
@@ -187,7 +242,7 @@ table_inspect_cmp:
     or      a
     jr      nz,table_inspect_next   ; not this parameters, check next in the table
     inc     de
-    pop     af         ; discard HL to keep current arrgs index
+    pop     af                      ; discard HL to keep current arrgs index
     xor     a
     ld      (parm_found),a
     ld      a,(de)
@@ -195,9 +250,9 @@ table_inspect_cmp:
     inc     de
     ld      a,(de)
     ld      b,a
-    pop     de         ; get ret address out of the stack temporarily
-    push    bc         ; push the routine address in the stack
-    push    de         ; push the return addres of this routine back in the stack
+    pop     de                      ; get ret address out of the stack temporarily
+    push    bc                      ; push the routine address in the stack
+    push    de                      ; push the return addres of this routine back in the stack
     ld      (parm_address),hl
     scf
     ccf
@@ -210,15 +265,13 @@ table_inspect_next:
     jr      nz,table_inspect_next
     ld      a,(parm_index)
     inc     a
-    ld      (parm_index),a    ; this index will tell which parameter was found
+    ld      (parm_index),a           ; this index will tell which parameter was found
     pop     hl
     inc     de
     inc     de
     ld      a,(de)
     or      a
     jr      nz,table_inspect0
-    ;ld      a,$ff
-    ;ld      (parm_index),a   ; parameter not found in the index
     scf
     ret
 
@@ -301,16 +354,16 @@ parms_table:
     dw param_f
     db 0
 
-; each paramater from command line should have an impact in the program
-; these options here are defined to store the results of the parsing for each argumen
-; for example, if cli hard /help, then none of his is needed because the help will be displayed,
-; and the program will exit to propt.
+; Each paramater from command line should have an impact in the program
+; These options here are defined to store the results of the parsing for each argument
+; For example, if cli had /help, then none of this is needed because the help will be displayed,
+; and the program will exit to prompt.
 ; However, if /enable option was passed, then we need a flag to indicate this case.
-; "data_option_e" cnotain initially 1, but if the /enable was passed, then the routine "param_e"
+; "data_option_e" contain initially $ff, but if the /enable was passed, then the routine "param_e"
 ; must change this value to zero.
 ; Another exampe is for the filename. The initial value in "data_option_f" contain a $ff in 
 ; the first position. If the filename is passed using /file <filename.ext>, this address should
-; contain the actual filename in the format "filenameext" (11 chars).
+; contain the actual filename in the format <drive>"filenameext" (1 byte + 11 chars).
 
 parm_index: db $ff
 parm_found: db $ff
