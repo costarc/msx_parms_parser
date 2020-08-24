@@ -2,7 +2,7 @@
 ;|                                                                           |
 ;| MSX Command Line Parser for MSX-DOS 32K EEPROM                            |
 ;|                                                                           |
-;| Version : 1.0                                                             |
+;| Version : 1.1                                                             |
 ;|                                                                           |
 ;| Copyright (c) 2020 Ronivon Candido Costa (ronivon@outlook.com)            |
 ;|                                                                           |
@@ -33,6 +33,7 @@
 ;  z80asm parser.asm -o parser.com
 ; File history :
 ; 1.0  - 10/08/2020 : initial version
+; 1.1  - 24/08/2020 : Improved parsing of file name
 ;
 ; How to use:
 ; 1. Define you options in the parms_table
@@ -69,19 +70,17 @@ BDOS: EQU     5
 
                                 ; Ssample code - display the file name passed from CLI in FCB format
                                 ; <drive>FileNameExt" : 1 byte for drive, 11 bytes for filename
+    call  PRINTNEWLINE
     ld    hl,data_option_f
-    ld    a,(hl)
-    add   $30
-    call  PUTCHAR
     inc   hl
-    call  print
+    call  PRINTFCBFNAME
+    call  PRINTNEWLINE
     jr     exitmyprogram
 
 exitmyprogram:
     ld    hl,txt_exit
     call  print
     ret    
-
 
 parseargs:
     ld      hl,$80
@@ -98,15 +97,15 @@ parseargs:
     pop     hl
 parse_next:
     call    space_skip
-    ret     c
+    jr      c,parse_filename
     inc     hl
     ld      de,parms_table
     call    table_inspect
-    ret     c
+    jr      c,parse_filename
     ld      a,(parm_found)
     or      a
     jr      nz,parse_checkendofparms
-    pop     hl                          ; get form stack the address of the routine
+    pop     hl                          ; get the address of the routine
                                         ; for this parameter
     ld      de,parse_checkendofparms
     push    de
@@ -114,7 +113,34 @@ parse_next:
 parse_checkendofparms:
     ld      hl,(parm_address)
     jr      parse_next
-
+    
+; After parsing is complete for all options, run another check to check
+; if filename was provided without the "/f" option. However, /if "/f" had
+; already been provided, will simply ignore en exit this routine.
+parse_filename:
+    ld      a,(data_option_f)
+    cp      $ff
+    ret     nz
+    ld      hl,$80
+    ld      a,(hl)
+    cp      2
+    ret     c
+parse_filename1:
+    inc     hl
+    ld      a,(hl)
+    or      a
+    jr      nz,parse_filename1
+parse_filename2:
+    dec     hl
+    ld      a,(hl)
+    cp      ' ' 
+    jr      nz,parse_filename2
+    inc     hl
+    ld      (parm_address),hl
+    xor      a
+    ld      (parm_found),a
+    jp      param_f
+    
 param_h:
     xor     a
     ld      (ignorerc),a
@@ -265,7 +291,7 @@ table_inspect_next:
     jr      nz,table_inspect_next
     ld      a,(parm_index)
     inc     a
-    ld      (parm_index),a           ; this index will tell which parameter was found
+    ld      (parm_index),a    ; this index will tell which parameter was found
     pop     hl
     inc     de
     inc     de
@@ -274,7 +300,6 @@ table_inspect_next:
     jr      nz,table_inspect0
     scf
     ret
-
 
 ; Skip spaces in the args.
 ; Inputs: 
@@ -312,6 +337,34 @@ PRINT1:
         inc     hl
         jr      print
 
+PRINTNEWLINE:
+    push     hl
+    ld       hl,txt_newline
+    call     print
+    pop      hl
+    ret
+
+;-------------------------------------------
+; print file name from FCB properly parsed |
+;-------------------------------------------
+PRINTFCBFNAME:
+    ld       b,8
+    call     PRINTFCBFNAME2
+    ld       a,'.'
+    call     PUTCHAR
+    ld       b,3
+    call     PRINTFCBFNAME2
+    ret
+PRINTFCBFNAME2:
+    ld       a,(hl)
+    inc      hl
+    cp       ' '
+    jr       z,PRINTFCBFNAME3
+    call     PUTCHAR
+PRINTFCBFNAME3:
+    djnz     PRINTFCBFNAME2
+    ret
+
 PUTCHAR:
         push    bc
         push    de
@@ -338,6 +391,7 @@ txt_noparams: db "No command line parameters passed",13,10,0
 txt_parm_f: db "Filename:",13,10,0
 txt_exit: db "Returning to MSX-DOS",13,10,0
 txt_needfname: db "File name not specified",13,10,0
+txt_newline:   db 13,10,0
 
 parms_table:
     db "h",0
@@ -369,8 +423,8 @@ parm_index: db $ff
 parm_found: db $ff
 ignorerc:   db $ff
 parm_address: dw 0000
-data_option_e: db 1
-data_option_d: db 1
-data_option_s: db 0
+data_option_e: db $ff
+data_option_d: db $ff
+data_option_s: db $ff
 data_option_f: db $ff,$ff,0,0,0,0,0,0,0,0,0,0
                db 0
